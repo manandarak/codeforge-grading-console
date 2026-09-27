@@ -1,0 +1,824 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Grading Console – CodeForge</title>
+<meta name="description" content="Prototype grading console: upload marks, set grade cutoffs, review the distribution and export grades.">
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+:root{
+  color-scheme:light;
+  --bg:#f5f3ff; --surface:#ffffff; --surface-2:#f8f7fc; --border:#e4e2ee;
+  --text:#111827; --text-2:#4b5563; --muted:#6b7280;
+  --accent:#5b3cc4; --accent-ink:#ffffff; --accent-soft:#ede9fe; --accent-text:#312e81;
+  --bar-a:#2a78d6; --bar-b:#86b6ef; --cut:#374151;
+  --ok:#0a7a0a; --ok-bg:#e8f6e8; --warn:#8a5a00; --warn-bg:#fff5db; --err:#b91c1c; --err-bg:#fdecec;
+  --shadow:0 4px 14px rgba(17,24,39,.07);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#121118; --surface:#1c1b22; --surface-2:#24232b; --border:#34323d;
+    --text:#f3f4f6; --text-2:#c9c8d1; --muted:#9e9da8;
+    --accent:#8b74f0; --accent-ink:#0f0c1d; --accent-soft:#2c2645; --accent-text:#c8bdfb;
+    --bar-a:#3987e5; --bar-b:#184f95; --cut:#d1d5db;
+    --ok:#5cd65c; --ok-bg:#143314; --warn:#f5c451; --warn-bg:#3a2f10; --err:#f08080; --err-bg:#3d1a1a;
+    --shadow:0 4px 14px rgba(0,0,0,.4);
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#121118; --surface:#1c1b22; --surface-2:#24232b; --border:#34323d;
+  --text:#f3f4f6; --text-2:#c9c8d1; --muted:#9e9da8;
+  --accent:#8b74f0; --accent-ink:#0f0c1d; --accent-soft:#2c2645; --accent-text:#c8bdfb;
+  --bar-a:#3987e5; --bar-b:#184f95; --cut:#d1d5db;
+  --ok:#5cd65c; --ok-bg:#143314; --warn:#f5c451; --warn-bg:#3a2f10; --err:#f08080; --err-bg:#3d1a1a;
+  --shadow:0 4px 14px rgba(0,0,0,.4);
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:"Segoe UI",system-ui,-apple-system,Arial,sans-serif;background:var(--bg);color:var(--text);line-height:1.45}
+.container{max-width:1180px;margin:auto;padding:16px}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+
+header{display:flex;align-items:center;gap:16px;background:var(--surface);border-radius:12px;padding:14px 18px;box-shadow:var(--shadow);margin-bottom:14px}
+header .titles{flex:1;min-width:0}
+header h1{margin:0;font-size:20px;color:var(--accent-text)}
+header p{margin:2px 0 0;font-size:13px;color:var(--text-2)}
+.timer{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text-2)}
+.timer svg{transform:rotate(-90deg)}
+.timer b{font-variant-numeric:tabular-nums;color:var(--accent-text);font-size:14px}
+
+.panel{background:var(--surface);border-radius:12px;padding:16px;box-shadow:var(--shadow);margin-bottom:14px;min-width:0}
+.panel h2{margin:0 0 10px;font-size:15px;display:flex;align-items:center;gap:8px}
+.step{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:var(--accent-soft);color:var(--accent-text);font-size:12px;font-weight:700}
+.hint{font-size:12px;color:var(--muted);margin:4px 0 0}
+
+.setup{display:grid;grid-template-columns:1fr 1.3fr 1fr;gap:14px;align-items:start}
+label.field{display:block;font-size:13px;font-weight:600;margin-bottom:4px}
+input[type=text],input[type=search],select,input[type=number]{width:100%;padding:9px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font:inherit;font-size:14px}
+select:disabled{opacity:.55}
+.dropzone{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:2px dashed var(--border);border-radius:10px;padding:12px;text-align:center;cursor:pointer;background:var(--surface-2);font-size:13px;min-height:74px}
+.dropzone.drag{border-color:var(--accent);background:var(--accent-soft)}
+.dropzone:focus-within{outline:3px solid var(--accent);outline-offset:2px}
+.dropzone strong{color:var(--accent-text)}
+.dropzone input{position:absolute;opacity:0;width:1px;height:1px}
+.linkbtn{background:none;border:none;color:var(--accent-text);text-decoration:underline;padding:0;font:inherit;font-size:12px;cursor:pointer}
+details.guide{margin-top:12px;font-size:13px;color:var(--text-2);background:var(--surface-2);border-radius:8px;padding:8px 12px}
+details.guide summary{cursor:pointer;font-weight:600;color:var(--accent-text)}
+details.guide p,details.guide ul{margin:6px 0 0}
+
+button{font:inherit;font-size:14px;padding:9px 16px;border:none;border-radius:8px;background:var(--accent);color:var(--accent-ink);font-weight:600;cursor:pointer}
+button.secondary{background:var(--surface-2);color:var(--text);border:1px solid var(--border)}
+button:disabled{opacity:.45;cursor:not-allowed}
+button.icon{padding:4px 0;width:30px;font-size:16px;line-height:1}
+
+.banner{border-radius:8px;padding:10px 12px;font-size:13px;margin-top:10px}
+.banner.ok{background:var(--ok-bg);color:var(--ok)}
+.banner.warn{background:var(--warn-bg);color:var(--warn)}
+.banner.err{background:var(--err-bg);color:var(--err)}
+.banner ul{margin:6px 0 0;padding-left:18px;max-height:180px;overflow:auto}
+.banner details summary{cursor:pointer;font-weight:600}
+
+.workspace{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:14px}
+.stats{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:12px}
+.stat{background:var(--surface-2);border-radius:8px;padding:8px;text-align:center}
+.stat span{display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.stat b{font-size:18px;font-variant-numeric:tabular-nums}
+
+.chart-wrap{position:relative}
+#hist{width:100%;height:auto;display:block}
+#hist text{fill:var(--muted);font-size:11px}
+#hist .band-label{fill:var(--text-2);font-weight:600;font-size:11px}
+#hist .grid{stroke:var(--border)}
+#hist .cut{stroke:var(--cut);stroke-dasharray:3 3}
+#hist .hit{fill:transparent;cursor:crosshair}
+#hist .bar,#hist .cut,#hist text{pointer-events:none}
+#hist .hit:hover + .bar, #hist .bar.hover{opacity:.7}
+.tooltip{position:absolute;pointer-events:none;background:var(--surface);border:1px solid var(--border);box-shadow:var(--shadow);border-radius:8px;padding:6px 10px;font-size:12px;white-space:nowrap;display:none;z-index:5}
+.tooltip b{font-size:14px}
+.legend{display:flex;gap:14px;font-size:12px;color:var(--text-2);margin-top:4px;flex-wrap:wrap}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px}
+
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{padding:6px 8px;text-align:left;border-bottom:1px solid var(--border)}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:600}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+.meter{height:8px;border-radius:4px;background:var(--accent-soft);min-width:60px}
+.meter > div{height:100%;border-radius:4px;background:var(--bar-a)}
+
+.grade-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.grade{border:1px solid var(--border);border-radius:10px;padding:8px 10px;background:var(--surface-2)}
+.grade.invalid{border-color:var(--err);background:var(--err-bg)}
+.grade .top{display:flex;justify-content:space-between;align-items:baseline}
+.grade .letter{font-size:18px;font-weight:700;color:var(--accent-text)}
+.grade .count{font-size:12px;color:var(--muted)}
+.grade .row{display:flex;align-items:center;gap:4px;margin-top:6px;font-size:13px}
+.grade .row input{width:58px;text-align:center;padding:5px 4px}
+.grade .row .to{color:var(--text-2);margin-left:4px;white-space:nowrap}
+.grade .msg{font-size:12px;color:var(--err);margin-top:4px}
+.actions{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap;align-items:center}
+.actions .why{font-size:12px;color:var(--muted)}
+
+.borderline{margin-top:14px;border-top:1px solid var(--border);padding-top:12px}
+.borderline h3{margin:0 0 6px;font-size:14px}
+.borderline .ctl{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-2)}
+.borderline .ctl select{width:auto;padding:3px 6px;font-size:12px}
+.bl-item{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 10px;background:var(--warn-bg);color:var(--warn);border-radius:8px;margin-top:6px;font-size:13px}
+.bl-item button{font-size:12px;padding:5px 10px;white-space:nowrap}
+.bl-none{font-size:13px;color:var(--muted);margin-top:6px}
+
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.toolbar input{flex:1;min-width:180px}
+.toolbar select{width:auto}
+.table-scroll{max-height:420px;overflow:auto;border:1px solid var(--border);border-radius:8px}
+.table-scroll thead th{position:sticky;top:0;background:var(--surface);cursor:pointer;user-select:none}
+.badge{display:inline-block;font-size:11px;padding:1px 6px;border-radius:999px;background:var(--warn-bg);color:var(--warn);margin-left:6px}
+.pill{display:inline-block;min-width:28px;text-align:center;font-weight:700;padding:1px 6px;border-radius:6px;background:var(--accent-soft);color:var(--accent-text)}
+
+dialog{border:none;border-radius:14px;padding:0;max-width:560px;width:calc(100% - 32px);background:var(--surface);color:var(--text);box-shadow:0 20px 50px rgba(0,0,0,.3)}
+dialog::backdrop{background:rgba(15,12,29,.5)}
+dialog .dlg-body{padding:18px 20px}
+dialog h2{margin:0 0 10px;font-size:17px}
+dialog dl{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:13px;margin:0 0 10px}
+dialog dt{color:var(--muted)}
+dialog dd{margin:0;font-weight:600;word-break:break-word}
+dialog .dlg-actions{display:flex;justify-content:flex-end;gap:10px;padding:12px 20px;border-top:1px solid var(--border)}
+
+.welcome{font-size:14px;color:var(--ok);margin:0 0 12px}
+.done{font-size:14px;color:var(--ok);margin-top:10px}
+.empty-state{text-align:center;color:var(--muted);padding:28px 10px;font-size:14px}
+footer{font-size:12px;color:var(--muted);text-align:center;padding:8px 0 20px}
+[hidden]{display:none!important}
+
+@media (max-width:960px){
+  .setup{grid-template-columns:1fr}
+  .workspace{grid-template-columns:1fr}
+  .stats{grid-template-columns:repeat(3,1fr)}
+}
+@media (max-width:520px){
+  header{flex-wrap:wrap}
+  .grade-grid{grid-template-columns:1fr}
+  .stats{grid-template-columns:repeat(2,1fr)}
+}
+@media (prefers-reduced-motion: reduce){
+  *{animation:none!important;transition:none!important}
+}
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <div class="titles">
+    <h1>Grading Console</h1>
+    <p>CodeForge prototype. Not an official grading tool.</p>
+  </div>
+  <div class="timer" title="Time since you started grading">
+    <svg width="34" height="34" aria-hidden="true">
+      <circle cx="17" cy="17" r="14" stroke="var(--accent-soft)" stroke-width="4" fill="none"/>
+      <circle id="timerArc" cx="17" cy="17" r="14" stroke="var(--accent)" stroke-width="4" fill="none" stroke-linecap="round"/>
+    </svg>
+    <div>Grading time<br><b id="timerText">00:00</b></div>
+  </div>
+  <button class="secondary icon" id="themeBtn" aria-label="Switch colour theme" title="Switch colour theme">◐</button>
+</header>
+
+<section class="panel" aria-labelledby="setupTitle">
+  <h2 id="setupTitle"><span class="step">1</span> Set up</h2>
+  <div class="setup">
+    <div>
+      <label class="field" for="instructor">Instructor name <span aria-hidden="true">*</span></label>
+      <input type="text" id="instructor" autocomplete="name" placeholder="e.g. Dr. A. Sharma" required aria-describedby="instructorHint">
+      <p class="hint" id="instructorHint">Required. It is printed on the exported grade sheet.</p>
+    </div>
+    <div>
+      <span class="field" style="display:block;font-size:13px;font-weight:600;margin-bottom:4px">Marks file</span>
+      <label class="dropzone" id="dropzone">
+        <input type="file" id="file" accept=".xlsx,.xls,.csv" aria-describedby="fileHint">
+        <span><strong>Choose an Excel file</strong> or drag it here</span>
+        <span class="hint" id="fileName">.xlsx, .xls or .csv</span>
+      </label>
+      <p class="hint" id="fileHint">Columns: BITS ID, Course, Total Marks (0–100). <button class="linkbtn" id="templateBtn" type="button">Download a sample file</button></p>
+    </div>
+    <div>
+      <label class="field" for="course">Course</label>
+      <select id="course" disabled><option value="">Upload a file first</option></select>
+      <p class="hint" id="courseHint"></p>
+    </div>
+  </div>
+
+  <details class="guide">
+    <summary>Marks file format guidance</summary>
+    <ul>
+      <li>The first sheet must have three columns: <b>BITS ID</b>, <b>Course</b> and <b>Total Marks</b>. Header spelling and case are flexible, and extra columns are ignored.</li>
+      <li>Total Marks should be whole numbers from 0 to 100. Fractional values are rounded to the nearest integer (80.4 → 80, 80.5 → 81) and flagged so you can check them.</li>
+      <li>Students who did not appear for the examination and are to receive an <b>NC</b> grade should not be in the file. Rows with blank marks are excluded and listed for you.</li>
+      <li>A file can contain several courses. You grade one course at a time.</li>
+    </ul>
+  </details>
+
+  <div id="fileReport" aria-live="polite"></div>
+</section>
+
+<div id="emptyState" class="panel empty-state">Enter your name, upload a marks file and pick a course to start grading.</div>
+
+<div id="gradingArea" hidden>
+  <p class="welcome" id="welcome" aria-live="polite"></p>
+  <div class="workspace">
+    <section class="panel" aria-labelledby="anaTitle">
+      <h2 id="anaTitle"><span class="step">2</span> Marks overview <span class="hint" id="courseLabel" style="margin:0;font-weight:400"></span></h2>
+      <div class="stats" id="stats"></div>
+      <div class="chart-wrap" id="chartWrap">
+        <svg id="hist" viewBox="0 0 640 260" role="img" aria-labelledby="histDesc"><desc id="histDesc"></desc></svg>
+        <div class="tooltip" id="tooltip" role="presentation"></div>
+      </div>
+      <div class="legend" aria-hidden="true">
+        <span><i style="background:var(--bar-a)"></i><i style="background:var(--bar-b)"></i>Students at each mark, shaded by grade band</span>
+        <span><i style="background:none;border-top:2px dashed var(--cut);height:0;width:14px"></i>Grade cutoff</span>
+      </div>
+      <h2 style="margin-top:16px;font-size:14px">Grade distribution</h2>
+      <table aria-label="Grade distribution">
+        <thead><tr><th>Grade</th><th>Range</th><th class="num">Students</th><th class="num">%</th><th style="width:35%"><span class="sr-only">Share</span></th></tr></thead>
+        <tbody id="distBody"></tbody>
+      </table>
+    </section>
+
+    <section class="panel" aria-labelledby="cutTitle">
+      <h2 id="cutTitle"><span class="step">3</span> Grade cutoffs</h2>
+      <p class="hint" style="margin:-4px 0 10px">Set each grade's minimum mark. The maximum follows from the grade above, so ranges never have gaps or overlaps.</p>
+      <div class="grade-grid" id="grades"></div>
+      <div class="banner err" id="rangeError" role="alert" hidden></div>
+
+      <div class="borderline" aria-labelledby="blTitle">
+        <h3 id="blTitle">Students just below a cutoff</h3>
+        <div class="ctl">
+          <label for="blWindow">Show students up to</label>
+          <select id="blWindow"><option>1</option><option selected>2</option><option>3</option><option>5</option></select>
+          <span>marks below a cutoff</span>
+        </div>
+        <div id="blList"></div>
+      </div>
+
+      <div class="actions">
+        <button class="secondary" id="resetRanges" type="button">Reset to defaults</button>
+        <button id="download" type="button" disabled>Review &amp; export</button>
+        <span class="why" id="whyDisabled"></span>
+      </div>
+      <p class="done" id="thankyou" aria-live="polite"></p>
+    </section>
+  </div>
+
+  <section class="panel" aria-labelledby="stuTitle">
+    <h2 id="stuTitle"><span class="step">4</span> Students</h2>
+    <div class="toolbar">
+      <label class="sr-only" for="search">Search by BITS ID</label>
+      <input type="search" id="search" placeholder="Search by BITS ID">
+      <label class="sr-only" for="gradeFilter">Filter by grade</label>
+      <select id="gradeFilter"><option value="">All grades</option></select>
+      <label class="sr-only" for="blOnly">Borderline only</label>
+      <select id="blOnly"><option value="">Everyone</option><option value="1">Borderline only</option></select>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr>
+          <th scope="col" data-sort="id" aria-sort="none">BITS ID</th>
+          <th scope="col" class="num" data-sort="marks" aria-sort="descending">Marks ▼</th>
+          <th scope="col" data-sort="grade" aria-sort="none">Grade</th>
+        </tr></thead>
+        <tbody id="studentBody"></tbody>
+      </table>
+    </div>
+    <p class="hint" id="studentCount"></p>
+  </section>
+</div>
+
+<footer>Everything runs in your browser. Marks never leave this device.</footer>
+</div>
+
+<dialog id="exportDlg" aria-labelledby="dlgTitle">
+  <div class="dlg-body">
+    <h2 id="dlgTitle">Review before export</h2>
+    <dl id="dlgSummary"></dl>
+    <table aria-label="Grades being exported"><thead><tr><th>Grade</th><th>Range</th><th class="num">Students</th></tr></thead><tbody id="dlgDist"></tbody></table>
+    <div id="dlgWarn"></div>
+  </div>
+  <div class="dlg-actions">
+    <button class="secondary" id="dlgCancel" type="button">Back to editing</button>
+    <button id="dlgConfirm" type="button">Download CSV</button>
+  </div>
+</dialog>
+
+<script>
+"use strict";
+const $=id=>document.getElementById(id);
+
+const GRADES=["A","A-","B","B-","C","C-","D","E"];
+const DEFAULT_MINS={"A":80,"A-":70,"B":60,"B-":50,"C":40,"C-":30,"D":20,"E":0};
+const STORE_KEY="codeforge-ranges-v1";
+
+const state={
+  records:[],          // valid rows: {id, course, marks, row, rounded}
+  issues:[],           // {row, level:'error'|'warn', msg}
+  fileName:"",
+  course:"",
+  mins:{...DEFAULT_MINS},
+  saved:loadSaved(),   // course -> mins, remembered between visits
+  sort:{key:"marks",dir:-1},
+  dirty:false,         // ranges changed since last export
+  exports:0,
+};
+
+/* ---------- storage (best effort, never required) ---------- */
+function loadSaved(){ try{ return JSON.parse(localStorage.getItem(STORE_KEY))||{}; }catch{ return {}; } }
+function persist(){ try{ localStorage.setItem(STORE_KEY,JSON.stringify(state.saved)); }catch{} }
+
+/* ---------- timer: starts when grading starts, ticks immediately ---------- */
+const timer={start:null,handle:null,stoppedAt:null};
+const ARC=2*Math.PI*14;
+$("timerArc").style.strokeDasharray=ARC;
+$("timerArc").style.strokeDashoffset=ARC;
+function elapsed(){ return timer.start? ((timer.stoppedAt||Date.now())-timer.start):0; }
+function renderTimer(){
+  const e=elapsed(), m=Math.floor(e/60000), s=Math.floor((e%60000)/1000);
+  $("timerText").textContent=String(m).padStart(2,"0")+":"+String(s).padStart(2,"0");
+  $("timerArc").style.strokeDashoffset=ARC*(1-Math.min(e/3600000,1));
+}
+function startTimer(){
+  if(!timer.start) timer.start=Date.now();
+  if(timer.stoppedAt){ timer.start+=Date.now()-timer.stoppedAt; timer.stoppedAt=null; }
+  if(!timer.handle){ timer.handle=setInterval(renderTimer,1000); }
+  renderTimer();
+}
+function stopTimer(){
+  clearInterval(timer.handle); timer.handle=null;
+  if(timer.start && !timer.stoppedAt) timer.stoppedAt=Date.now();
+  renderTimer();
+}
+
+/* ---------- theme ---------- */
+$("themeBtn").onclick=()=>{
+  const root=document.documentElement;
+  const dark=root.dataset.theme? root.dataset.theme==="dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  root.dataset.theme=dark?"light":"dark";
+  try{ localStorage.setItem("codeforge-theme",root.dataset.theme); }catch{}
+  if(state.course) renderChart();
+};
+try{ const t=localStorage.getItem("codeforge-theme"); if(t) document.documentElement.dataset.theme=t; }catch{}
+
+/* ---------- file reading & validation ---------- */
+const HEADER_ALIASES={
+  id:["bitsid","id","studentid","idno","bitsidno","studentbitsid"],
+  course:["course","coursename","coursecode","subject"],
+  marks:["totalmarks","marks","total","totalmarksoutof100","totalmarks100","score"]
+};
+const norm=h=>String(h??"").toLowerCase().replace(/[^a-z0-9]/g,"");
+const clean=v=>String(v??"").replace(/\s+/g," ").trim();
+
+function parseWorkbook(buf,name){
+  const wb=XLSX.read(buf,{type:"array"});
+  const sheet=wb.Sheets[wb.SheetNames[0]];
+  const rows=XLSX.utils.sheet_to_json(sheet,{header:1,defval:"",blankrows:false,raw:true});
+  const issues=[], records=[];
+  if(!rows.length) return {fatal:"The first sheet is empty."};
+
+  const header=rows[0].map(norm), cols={};
+  for(const [key,aliases] of Object.entries(HEADER_ALIASES)){
+    const idx=header.findIndex(h=>aliases.includes(h));
+    if(idx>=0) cols[key]=idx;
+  }
+  const missing=[["id","BITS ID"],["course","Course"],["marks","Total Marks"]].filter(([k])=>cols[k]===undefined).map(([,l])=>l);
+  if(missing.length){
+    const found=rows[0].map(clean).filter(Boolean).join(", ")||"(none)";
+    return {fatal:`Missing column${missing.length>1?"s":""}: ${missing.join(", ")}. The header row has: ${found}.`};
+  }
+  const extra=rows[0].filter((h,i)=>clean(h)&&!Object.values(cols).includes(i)).map(clean);
+  if(extra.length) issues.push({row:1,level:"warn",msg:`Ignored extra column${extra.length>1?"s":""}: ${extra.join(", ")}`});
+  if(wb.SheetNames.length>1) issues.push({row:"-",level:"warn",msg:`Only the first sheet ("${wb.SheetNames[0]}") was read. The file has ${wb.SheetNames.length} sheets.`});
+
+  const seen=new Map();
+  rows.slice(1).forEach((r,i)=>{
+    const rowNo=i+2;
+    const id=clean(r[cols.id]), course=clean(r[cols.course]), raw=r[cols.marks];
+    if(!id && !course && clean(raw)==="") return;           // empty row
+    if(!id){ issues.push({row:rowNo,level:"error",msg:"Missing BITS ID. Row excluded."}); return; }
+    if(!course){ issues.push({row:rowNo,level:"error",msg:`${id}: missing course. Row excluded.`}); return; }
+    if(clean(raw)===""){ issues.push({row:rowNo,level:"error",msg:`${id}: blank marks. Row excluded (remove NC students from the file).`}); return; }
+    const n=typeof raw==="number"? raw : Number(clean(raw));
+    if(!Number.isFinite(n)){ issues.push({row:rowNo,level:"error",msg:`${id}: marks "${clean(raw)}" is not a number. Row excluded.`}); return; }
+    if(n<0||n>100){ issues.push({row:rowNo,level:"error",msg:`${id}: marks ${n} is outside 0–100. Row excluded.`}); return; }
+    let marks=n, rounded=false;
+    if(!Number.isInteger(n)){ marks=Math.round(n); rounded=true; issues.push({row:rowNo,level:"warn",msg:`${id}: ${n} rounded to ${marks}.`}); }
+    const key=course+"\u0000"+id.toUpperCase();
+    if(seen.has(key)){ issues.push({row:rowNo,level:"error",msg:`${id}: duplicate in ${course} (first seen on row ${seen.get(key)}). Row excluded.`}); return; }
+    seen.set(key,rowNo);
+    records.push({id,course,marks,row:rowNo,rounded});
+  });
+  if(!records.length) return {fatal:"No valid student rows were found.",issues};
+  return {records,issues};
+}
+
+function handleFile(f){
+  if(!f) return;                                    // dialog cancelled
+  const reader=new FileReader();
+  reader.onerror=()=>showFileReport({fatal:"The file could not be read."},f.name);
+  reader.onload=ev=>{
+    let res;
+    try{ res=parseWorkbook(new Uint8Array(ev.target.result),f.name); }
+    catch(err){ res={fatal:"This does not look like a valid Excel or CSV file."}; }
+    showFileReport(res,f.name);
+    if(res.fatal) return;
+    state.records=res.records; state.issues=res.issues; state.fileName=f.name;
+    populateCourses();
+  };
+  reader.readAsArrayBuffer(f);
+}
+
+function showFileReport(res,name){
+  const box=$("fileReport"); box.innerHTML="";
+  $("fileName").textContent=name;
+  const div=document.createElement("div");
+  if(res.fatal){
+    div.className="banner err";
+    div.textContent=`Could not use "${name}". ${res.fatal}`;
+    if(res.issues&&res.issues.length) div.appendChild(issueList(res.issues,"Rows with problems"));
+    box.appendChild(div); return;
+  }
+  const errs=res.issues.filter(i=>i.level==="error"), warns=res.issues.filter(i=>i.level==="warn");
+  const courses=new Set(res.records.map(r=>r.course)).size;
+  div.className="banner "+(errs.length?"err":warns.length?"warn":"ok");
+  div.appendChild(document.createTextNode(
+    `${res.records.length} students loaded across ${courses} course${courses>1?"s":""}.`+
+    (errs.length?` ${errs.length} row${errs.length>1?"s were":" was"} excluded.`:"")+
+    (warns.length?` ${warns.length} note${warns.length>1?"s":""} to check.`:"")+
+    (!errs.length&&!warns.length?" No problems found.":"")));
+  if(res.issues.length) div.appendChild(issueList(res.issues,"Show details"));
+  box.appendChild(div);
+}
+function issueList(issues,label){
+  const d=document.createElement("details"); d.open=issues.some(i=>i.level==="error");
+  const s=document.createElement("summary"); s.textContent=label; d.appendChild(s);
+  const ul=document.createElement("ul");
+  issues.forEach(i=>{ const li=document.createElement("li"); li.textContent=`${i.level==="error"?"✖":"⚠"} Row ${i.row}: ${i.msg}`; ul.appendChild(li); });
+  d.appendChild(ul); return d;
+}
+
+function populateCourses(){
+  const sel=$("course"), prev=state.course;
+  const counts={}; state.records.forEach(r=>counts[r.course]=(counts[r.course]||0)+1);
+  const names=Object.keys(counts).sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));
+  sel.innerHTML="";                                       // clear stale options
+  sel.add(new Option("Select a course",""));
+  names.forEach(c=>sel.add(new Option(`${c} (${counts[c]} students)`,c)));
+  sel.disabled=false;
+  $("courseHint").textContent=`${names.length} course${names.length>1?"s":""} in this file.`;
+  if(prev && counts[prev]){ sel.value=prev; openCourse(prev); }
+  else if(names.length===1){ sel.value=names[0]; openCourse(names[0]); }
+  else { closeCourse(); }
+}
+
+/* ---------- course lifecycle ---------- */
+$("course").onchange=()=>{ const c=$("course").value; c?openCourse(c):closeCourse(); };
+function openCourse(c){
+  state.course=c;
+  state.mins={...DEFAULT_MINS,...(state.saved[c]||{})};
+  state.dirty=true;
+  $("emptyState").hidden=true; $("gradingArea").hidden=false;
+  $("courseLabel").textContent="· "+c;
+  $("thankyou").textContent="";
+  buildGradeUI();
+  startTimer();
+  updateAll();
+}
+function closeCourse(){
+  state.course="";
+  $("gradingArea").hidden=true; $("emptyState").hidden=false;
+}
+
+/* ---------- grading logic ---------- */
+const courseRecords=()=>state.records.filter(r=>r.course===state.course);
+function maxOf(i){ return i===0?100:state.mins[GRADES[i-1]]-1; }
+function gradeFor(m){ for(const g of GRADES) if(m>=state.mins[g]) return g; return "E"; }
+function rangeText(i){ const g=GRADES[i]; return `${state.mins[g]}–${maxOf(i)}`; }
+
+function validateRanges(){
+  const errors={};
+  GRADES.forEach((g,i)=>{
+    const v=state.mins[g];
+    if(!Number.isInteger(v)||v<0||v>100){ errors[g]="Enter a whole number from 0 to 100."; return; }
+    if(i<GRADES.length-1){
+      const next=state.mins[GRADES[i+1]];
+      if(Number.isInteger(next)&&v<=next){
+        errors[g]=`Must be higher than ${GRADES[i+1]}'s minimum (${next}).`;
+        errors[GRADES[i+1]]=errors[GRADES[i+1]]||`Must be lower than ${g}'s minimum (${v}).`;
+      }
+    }
+  });
+  return errors;
+}
+
+/* ---------- cutoff editor ---------- */
+function buildGradeUI(){
+  const wrap=$("grades"); wrap.innerHTML="";
+  GRADES.forEach((g,i)=>{
+    const card=document.createElement("div"); card.className="grade"; card.id="card-"+g;
+    const fixed=g==="E";
+    card.innerHTML=`<div class="top"><span class="letter"></span><span class="count" id="count-${g}"></span></div>
+      <div class="row">
+        <button class="secondary icon" type="button" data-step="-1" ${fixed?"disabled":""}>−</button>
+        <input type="number" min="0" max="100" step="1" inputmode="numeric" id="min-${g}" ${fixed?"readonly":""}>
+        <button class="secondary icon" type="button" data-step="1" ${fixed?"disabled":""}>+</button>
+        <span class="to">to <b id="max-${g}"></b></span>
+      </div><div class="msg" id="msg-${g}"></div>`;
+    card.querySelector(".letter").textContent=g;
+    const input=card.querySelector("input");
+    input.setAttribute("aria-label",`Minimum mark for ${g}`+(fixed?" (fixed at 0)":""));
+    input.value=state.mins[g];
+    input.addEventListener("input",()=>{ state.mins[g]=input.value===""?NaN:Number(input.value); rangesChanged(); });
+    card.querySelectorAll("[data-step]").forEach(b=>b.onclick=()=>{
+      const cur=Number.isInteger(state.mins[g])?state.mins[g]:DEFAULT_MINS[g];
+      setMin(g,Math.max(0,Math.min(100,cur+Number(b.dataset.step))));
+    });
+    wrap.appendChild(card);
+  });
+}
+function setMin(g,v){ state.mins[g]=v; $("min-"+g).value=v; rangesChanged(); }
+function rangesChanged(){
+  state.dirty=true;
+  const errs=validateRanges();
+  if(!Object.keys(errs).length){ state.saved[state.course]={...state.mins}; persist(); }
+  if(timer.stoppedAt) startTimer();
+  updateAll();
+}
+
+$("resetRanges").onclick=()=>{
+  const same=GRADES.every(g=>state.mins[g]===DEFAULT_MINS[g]);
+  if(same) return;
+  if(!confirm("Reset all grade cutoffs for this course to the defaults?")) return;
+  GRADES.forEach(g=>{ state.mins[g]=DEFAULT_MINS[g]; $("min-"+g).value=DEFAULT_MINS[g]; });
+  rangesChanged();
+};
+
+/* ---------- render everything ---------- */
+function updateAll(){
+  const errs=validateRanges(), valid=!Object.keys(errs).length;
+  GRADES.forEach((g,i)=>{
+    $("card-"+g).classList.toggle("invalid",!!errs[g]);
+    $("msg-"+g).textContent=errs[g]||"";
+    $("max-"+g).textContent=valid||i===0?maxOf(i):"–";
+    $("min-"+g).setAttribute("aria-invalid",errs[g]?"true":"false");
+  });
+  const box=$("rangeError");
+  box.hidden=valid; box.textContent=valid?"":"Fix the highlighted cutoffs. Each grade's minimum must be higher than the minimum of the grade below it.";
+  renderWelcome();
+  renderStats(); renderDistribution(valid); renderChart(valid); renderBorderline(valid); renderStudents(valid);
+  updateExportButton(valid);
+}
+function renderWelcome(){
+  const name=clean($("instructor").value);
+  $("welcome").textContent=name?`Welcome, ${name}. Review the distribution, adjust cutoffs if needed, then export.`:"";
+}
+function updateExportButton(valid){
+  const name=clean($("instructor").value), n=courseRecords().length;
+  let why="";
+  if(!name) why="Enter the instructor name to export.";
+  else if(!valid) why="Fix the cutoffs to export.";
+  else if(!n) why="This course has no students.";
+  $("download").disabled=!!why; $("whyDisabled").textContent=why;
+}
+$("instructor").addEventListener("input",()=>{ if(state.course){ renderWelcome(); updateExportButton(!Object.keys(validateRanges()).length); } });
+
+function stats(marks){
+  if(!marks.length) return null;
+  const s=[...marks].sort((a,b)=>a-b), n=s.length;
+  const mean=s.reduce((a,b)=>a+b,0)/n;
+  const median=n%2?s[(n-1)/2]:(s[n/2-1]+s[n/2])/2;
+  const sd=Math.sqrt(s.reduce((a,b)=>a+(b-mean)**2,0)/n);
+  return {n,min:s[0],max:s[n-1],mean,median,sd};
+}
+function renderStats(){
+  const st=stats(courseRecords().map(r=>r.marks));
+  const f=(v,d=0)=>st?(+v).toFixed(d).replace(/\.0+$/,""):"—";
+  const items=[["Students",st?st.n:"—"],["Mean",f(st&&st.mean,2)],["Median",f(st&&st.median,1)],["Std dev",f(st&&st.sd,2)],["Min",f(st&&st.min)],["Max",f(st&&st.max)]];
+  $("stats").innerHTML="";
+  items.forEach(([k,v])=>{ const d=document.createElement("div"); d.className="stat"; d.innerHTML="<span></span><b></b>"; d.firstChild.textContent=k; d.lastChild.textContent=v; $("stats").appendChild(d); });
+}
+
+function gradeCounts(){
+  const c={}; GRADES.forEach(g=>c[g]=0);
+  courseRecords().forEach(r=>c[gradeFor(r.marks)]++);
+  return c;
+}
+function renderDistribution(valid){
+  const body=$("distBody"); body.innerHTML="";
+  const counts=gradeCounts(), n=courseRecords().length;
+  GRADES.forEach((g,i)=>{
+    const pct=n&&valid?counts[g]/n*100:0;
+    const tr=document.createElement("tr");
+    tr.innerHTML=`<td><span class="pill"></span></td><td></td><td class="num"></td><td class="num"></td><td><div class="meter"><div></div></div></td>`;
+    tr.querySelector(".pill").textContent=g;
+    tr.children[1].textContent=valid?rangeText(i):"–";
+    tr.children[2].textContent=valid?counts[g]:"–";
+    tr.children[3].textContent=valid?pct.toFixed(1):"–";
+    tr.querySelector(".meter div").style.width=pct+"%";
+    body.appendChild(tr);
+    $("count-"+g).textContent=valid?`${counts[g]} student${counts[g]===1?"":"s"}`:"";
+  });
+}
+
+/* ---------- histogram (SVG, one bar per mark) ---------- */
+const NS="http://www.w3.org/2000/svg";
+function el(tag,attrs,parent){ const e=document.createElementNS(NS,tag); for(const k in attrs) e.setAttribute(k,attrs[k]); parent&&parent.appendChild(e); return e; }
+function renderChart(valid=!Object.keys(validateRanges()).length){
+  const svg=$("hist"), desc=$("histDesc");
+  [...svg.querySelectorAll(":scope > :not(desc)")].forEach(n=>n.remove());
+  const recs=courseRecords(), bins=Array(101).fill(0);
+  recs.forEach(r=>bins[r.marks]++);
+  const W=640,H=260,L=34,R=8,T=22,B=26, pw=W-L-R, ph=H-T-B, bw=pw/101;
+  const peak=Math.max(1,...bins);
+  const step=peak<=5?1:peak<=10?2:peak<=25?5:Math.ceil(peak/5/5)*5;
+  const top=Math.ceil(peak/step)*step;
+  const y=v=>T+ph-(v/top)*ph, x=m=>L+m*bw;
+  for(let v=0;v<=top;v+=step){
+    el("line",{x1:L,x2:W-R,y1:y(v),y2:y(v),class:"grid"},svg);
+    el("text",{x:L-6,y:y(v)+4,"text-anchor":"end"},svg).textContent=v;
+  }
+  for(let m=0;m<=100;m+=10) el("text",{x:x(m)+bw/2,y:H-8,"text-anchor":"middle"},svg).textContent=m;
+  const bandIdx=m=>GRADES.indexOf(gradeFor(m));
+  bins.forEach((v,m)=>{
+    const g=gradeFor(m);
+    const hit=el("rect",{x:x(m),y:T,width:bw,height:ph,class:"hit"},svg);
+    if(v){
+      const h=Math.max(2,(v/top)*ph);
+      const bar=el("path",{class:"bar",fill:valid&&bandIdx(m)%2?"var(--bar-b)":"var(--bar-a)",
+        d:roundedBar(x(m)+0.5,y(0)-h,Math.max(1,bw-1),h,Math.min(2,(bw-1)/2))},svg);
+      hit.addEventListener("pointerenter",()=>bar.classList.add("hover"));
+      hit.addEventListener("pointerleave",()=>bar.classList.remove("hover"));
+    }
+    hit.addEventListener("pointermove",e=>showTip(e,`<b>${v}</b> student${v===1?"":"s"} at <b>${m}</b> marks${valid?` · Grade ${g}`:""}`));
+    hit.addEventListener("pointerleave",hideTip);
+  });
+  if(valid){
+    GRADES.forEach((g,i)=>{
+      const lo=state.mins[g], hi=maxOf(i);
+      if(i<GRADES.length-1) el("line",{x1:x(lo),x2:x(lo),y1:T-4,y2:y(0),class:"cut"},svg);
+      if(hi-lo>=3||i===0) el("text",{x:(x(lo)+x(hi+1))/2,y:T-8,"text-anchor":"middle",class:"band-label"},svg).textContent=g;
+    });
+  }
+  const st=stats(recs.map(r=>r.marks));
+  desc.textContent=st?`Histogram of ${st.n} students' marks from ${st.min} to ${st.max}, with grade cutoffs. Mean ${st.mean.toFixed(1)}.`:"No students in this course.";
+}
+function roundedBar(x,y,w,h,r){ return `M${x},${y+h}V${y+r}Q${x},${y} ${x+r},${y}H${x+w-r}Q${x+w},${y} ${x+w},${y+r}V${y+h}Z`; }
+function showTip(e,html){
+  const tip=$("tooltip"), box=$("chartWrap").getBoundingClientRect();
+  tip.innerHTML=html; tip.style.display="block";
+  let left=e.clientX-box.left+12; if(left+tip.offsetWidth>box.width) left=e.clientX-box.left-tip.offsetWidth-12;
+  tip.style.left=left+"px"; tip.style.top=(e.clientY-box.top-36)+"px";
+}
+function hideTip(){ $("tooltip").style.display="none"; }
+
+/* ---------- borderline students ---------- */
+function borderlineGroups(){
+  const w=Number($("blWindow").value), recs=courseRecords(), out=[];
+  GRADES.slice(0,-1).forEach((g,i)=>{
+    const cut=state.mins[g];
+    const near=recs.filter(r=>r.marks<cut&&r.marks>=cut-w).sort((a,b)=>b.marks-a.marks);
+    if(near.length) out.push({g,i,cut,near,lowest:Math.min(...near.map(r=>r.marks))});
+  });
+  return out;
+}
+function renderBorderline(valid){
+  const list=$("blList"); list.innerHTML="";
+  if(!valid){ list.innerHTML='<p class="bl-none">Shown once the cutoffs are valid.</p>'; return; }
+  const groups=borderlineGroups();
+  if(!groups.length){ list.innerHTML='<p class="bl-none">No students are within that many marks of a cutoff.</p>'; return; }
+  groups.forEach(({g,i,cut,near,lowest})=>{
+    const below=GRADES[i+1], canLower=lowest>state.mins[below];
+    const item=document.createElement("div"); item.className="bl-item";
+    const txt=document.createElement("span");
+    txt.textContent=`⚠ ${near.length} student${near.length>1?"s":""} ${near.length>1?"are":"is"} just below ${g} (≥${cut}): `+near.map(r=>`${r.id} (${r.marks})`).join(", ");
+    item.appendChild(txt);
+    if(canLower){
+      const b=document.createElement("button"); b.className="secondary"; b.type="button";
+      b.textContent=`Lower ${g} to ${lowest}`;
+      b.onclick=()=>setMin(g,lowest);
+      item.appendChild(b);
+    }
+    list.appendChild(item);
+  });
+}
+$("blWindow").onchange=()=>updateAll();
+
+/* ---------- student table ---------- */
+GRADES.forEach(g=>$("gradeFilter").add(new Option(g,g)));
+["search","gradeFilter","blOnly"].forEach(id=>$(id).addEventListener("input",()=>renderStudents()));
+document.querySelectorAll("th[data-sort]").forEach(th=>th.onclick=()=>{
+  const k=th.dataset.sort;
+  state.sort=state.sort.key===k?{key:k,dir:-state.sort.dir}:{key:k,dir:k==="marks"?-1:1};
+  renderStudents();
+});
+function renderStudents(valid=!Object.keys(validateRanges()).length){
+  const q=$("search").value.trim().toUpperCase(), gf=$("gradeFilter").value, bo=$("blOnly").value;
+  const blIds=new Set(valid?borderlineGroups().flatMap(x=>x.near.map(r=>r.id)):[]);
+  let rows=courseRecords().map(r=>({...r,grade:valid?gradeFor(r.marks):"–",bl:blIds.has(r.id)}));
+  rows=rows.filter(r=>(!q||r.id.toUpperCase().includes(q))&&(!gf||r.grade===gf)&&(!bo||r.bl));
+  const {key,dir}=state.sort;
+  rows.sort((a,b)=>{
+    const va=key==="grade"?GRADES.indexOf(a.grade):a[key], vb=key==="grade"?GRADES.indexOf(b.grade):b[key];
+    return (va<vb?-1:va>vb?1:0)*dir || a.id.localeCompare(b.id);
+  });
+  document.querySelectorAll("th[data-sort]").forEach(th=>{
+    const on=th.dataset.sort===key;
+    th.setAttribute("aria-sort",on?(dir>0?"ascending":"descending"):"none");
+    th.textContent=th.textContent.replace(/ [▲▼]$/,"")+(on?(dir>0?" ▲":" ▼"):"");
+  });
+  const body=$("studentBody"); body.innerHTML="";
+  rows.forEach(r=>{
+    const tr=document.createElement("tr");
+    tr.innerHTML=`<td></td><td class="num"></td><td><span class="pill"></span></td>`;
+    tr.children[0].textContent=r.id;
+    if(r.rounded){ const s=document.createElement("span"); s.className="badge"; s.textContent="rounded"; s.title="Marks were a decimal in the file and have been rounded"; tr.children[0].appendChild(s); }
+    if(r.bl){ const s=document.createElement("span"); s.className="badge"; s.textContent="borderline"; tr.children[0].appendChild(s); }
+    tr.children[1].textContent=r.marks;
+    tr.querySelector(".pill").textContent=r.grade;
+    body.appendChild(tr);
+  });
+  $("studentCount").textContent=`Showing ${rows.length} of ${courseRecords().length} students.`;
+}
+
+/* ---------- export ---------- */
+function csvCell(v){
+  let s=String(v);
+  if(/^[=+\-@\t\r]/.test(s)) s="'"+s;                        // block spreadsheet formula injection
+  return /[",\n\r]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;
+}
+const slug=s=>s.replace(/[^A-Za-z0-9]+/g,"_").replace(/^_|_$/g,"")||"course";
+const today=()=>{ const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; };
+const exportName=()=>`grades_${slug(state.course)}_${today()}.csv`;
+
+function buildCsv(){
+  const lines=[
+    ["Instructor",clean($("instructor").value)],
+    ["Course",state.course],
+    ["Exported",new Date().toLocaleString()],
+    ["Grade ranges",GRADES.map((g,i)=>`${g}: ${rangeText(i)}`).join("; ")],
+    [],
+    ["BITS ID","Total Marks","Grade"],
+    ...courseRecords().map(r=>[r.id,r.marks,gradeFor(r.marks)])
+  ];
+  return "﻿"+lines.map(l=>l.map(csvCell).join(",")).join("\r\n")+"\r\n";
+}
+
+$("download").onclick=()=>{
+  const counts=gradeCounts(), recs=courseRecords();
+  const dl=$("dlgSummary"); dl.innerHTML="";
+  [["Instructor",clean($("instructor").value)],["Course",state.course],["Students",recs.length],["Source file",state.fileName],["File name",exportName()]]
+    .forEach(([k,v])=>{ const dt=document.createElement("dt"), dd=document.createElement("dd"); dt.textContent=k; dd.textContent=v; dl.append(dt,dd); });
+  const body=$("dlgDist"); body.innerHTML="";
+  GRADES.forEach((g,i)=>{ const tr=document.createElement("tr"); tr.innerHTML="<td></td><td></td><td class='num'></td>"; tr.children[0].textContent=g; tr.children[1].textContent=rangeText(i); tr.children[2].textContent=counts[g]; body.appendChild(tr); });
+  const warn=$("dlgWarn"); warn.innerHTML="";
+  const excluded=state.issues.filter(i=>i.level==="error").length;
+  const rounded=recs.filter(r=>r.rounded).length;
+  const bl=borderlineGroups().reduce((a,b)=>a+b.near.length,0);
+  const notes=[];
+  if(excluded) notes.push(`${excluded} row${excluded>1?"s":""} in the file ${excluded>1?"were":"was"} excluded (see the file check under Set up).`);
+  if(rounded) notes.push(`${rounded} student${rounded>1?"s have":" has"} rounded marks.`);
+  if(bl) notes.push(`${bl} student${bl>1?"s are":" is"} within ${$("blWindow").value} mark${$("blWindow").value==="1"?"":"s"} of a higher grade.`);
+  if(notes.length){ const d=document.createElement("div"); d.className="banner warn"; d.textContent="Please confirm: "+notes.join(" "); warn.appendChild(d); }
+  $("exportDlg").showModal();
+};
+$("dlgCancel").onclick=()=>$("exportDlg").close();
+$("dlgConfirm").onclick=()=>{
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(new Blob([buildCsv()],{type:"text/csv;charset=utf-8"}));
+  a.download=exportName(); document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+  $("exportDlg").close();
+  state.exports++; state.dirty=false; stopTimer();
+  const e=elapsed(), m=Math.floor(e/60000), s=Math.floor((e%60000)/1000);
+  $("thankyou").textContent=state.exports===1
+    ? `✔ Exported ${exportName()}. You completed grading in ${m} min ${s} sec.`
+    : `✔ Exported ${exportName()} (export ${state.exports}). Total grading time ${m} min ${s} sec.`;
+};
+
+/* ---------- upload wiring, template, unsaved-work guard ---------- */
+$("file").onchange=e=>{ handleFile(e.target.files[0]); e.target.value=""; };
+const dz=$("dropzone");
+["dragenter","dragover"].forEach(t=>dz.addEventListener(t,e=>{ e.preventDefault(); dz.classList.add("drag"); }));
+["dragleave","drop"].forEach(t=>dz.addEventListener(t,e=>{ e.preventDefault(); dz.classList.remove("drag"); }));
+dz.addEventListener("drop",e=>handleFile(e.dataTransfer.files[0]));
+
+$("templateBtn").onclick=()=>{
+  const rows=[["BITS ID","Course","Total Marks"]];
+  const marks=[91,84,82,79,78,73,69,66,64,61,58,55,49,47,41,38,33,27,22,15];
+  marks.forEach((m,i)=>rows.push([`2024A7PS${String(i+1).padStart(4,"0")}P`,"Course A",m]));
+  [72,65,59,52,44].forEach((m,i)=>rows.push([`2024B3PS${String(i+1).padStart(4,"0")}P`,"Course B",m]));
+  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rows),"Marks");
+  XLSX.writeFile(wb,"sample_marks.xlsx");
+};
+
+window.addEventListener("beforeunload",e=>{ if(state.course&&state.dirty){ e.preventDefault(); e.returnValue=""; } });
+</script>
+</body>
+</html>
