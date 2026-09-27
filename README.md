@@ -6,7 +6,7 @@ This project is a browser-based grading console for instructors. It allows staff
 
 *This is a challenge prototype and not an official BITS Pilani grading tool.*
 
-- **Live app:** `<add your URL here>`
+- **Live app:** 'https://manandarak.github.io/codeforge-grading-console/'
 - **Bug Fix Log:** [BUGFIX_LOG.md](BUGFIX_LOG.md) documents 20 issues, including how each bug was reproduced, the root cause, the fix, and the test used to verify it.
 - **Original code:** [original.html](original.html)
 
@@ -44,7 +44,7 @@ Each change addresses a real grading risk or time-consuming step in the process:
 
 ## Use of AI tools
 
-I used **Claude Code** (Anthropic's AI coding assistant) during this challenge, mainly for:
+I used **Claude** (Anthropic's AI assistant) during this challenge, mainly for:
 
 - **Finding bugs.** It helped me write a Playwright script that runs the original app in Chrome with different Excel files (normal, messy, text-formatted marks, wrong columns), so I could confirm each bug instead of guessing from the code.
 - **Testing.** The 47 checks in `tests/test.py` were written with AI help and run against the final app.
